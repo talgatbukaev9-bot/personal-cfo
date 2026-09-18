@@ -12,7 +12,24 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
+# --- СТИЛИ CSS (убираем белую полосу и разделители) ---
+st.markdown("""
+    <style>
+    /* Убираем или перекрашиваем горизонтальные линии hr */
+    hr {
+        border-color: #262730 !important;
+        margin-top: 1rem !important;
+        margin-bottom: 1rem !important;
+    }
+    /* Убираем белую подчеркивающую полосу у вкладок */
+    .stTabs [data-baseweb="tab-highlight-map"] {
+        background-color: #80FF00 !important;
+    }
+    .stTabs [data-baseweb="tab-border"] {
+        background-color: transparent !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 # Подключение манифеста для PWA
 st.markdown('<link rel="manifest" href="./manifest.json">', unsafe_allow_html=True)
 
