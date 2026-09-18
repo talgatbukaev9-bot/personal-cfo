@@ -1,0 +1,16 @@
+{
+  "name": "Личный CFO",
+  "short_name": "CFO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1512",
+  "theme_color": "#0c1512",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
