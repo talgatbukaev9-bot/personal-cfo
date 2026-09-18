@@ -1,65 +1,91 @@
-import streamlit as st
+import os
 import pandas as pd
+import numpy as np
+import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-import os
 
-st.set_page_config(page_title="Личный CFO | Система управления капиталом", page_icon="💰", layout="wide")
+# --- НАСТРОЙКА СТРАНИЦЫ ---
+st.set_page_config(
+    page_title="Личный CFO | Система управления капиталом",
+    page_icon="💼",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Подключение манифеста для PWA
+st.markdown('<link rel="manifest" href="./manifest.json">', unsafe_allow_html=True)
 
 CSV_PATH = "data.csv"
 
-# Исторические данные из оригинального дашборда (Апр - Авг 2026)
+# Базовые исторические данные по месяцам
 HISTORICAL_DATA = [
-    {"Date": "2026-04-15", "Type": "Доход", "Amount": 0, "Category": "FIXED", "Raw": "Базовый доход Апр"},
-    {"Date": "2026-04-15", "Type": "Расход", "Amount": 38000, "Category": "LIFE", "Raw": "Базовый расход Апр"},
-    {"Date": "2026-05-15", "Type": "Доход", "Amount": 28000, "Category": "FIXED", "Raw": "Базовый доход Май"},
-    {"Date": "2026-05-15", "Type": "Расход", "Amount": 25000, "Category": "LIFE", "Raw": "Базовый расход Май"},
-    {"Date": "2026-06-15", "Type": "Доход", "Amount": 48000, "Category": "FIXED", "Raw": "Базовый доход Июн"},
-    {"Date": "2026-06-15", "Type": "Расход", "Amount": 48000, "Category": "LIFE", "Raw": "Базовый расход Июн"},
-    {"Date": "2026-07-15", "Type": "Доход", "Amount": 82000, "Category": "FIXED", "Raw": "Базовый доход Июл"},
-    {"Date": "2026-07-15", "Type": "Расход", "Amount": 88000, "Category": "LIFE", "Raw": "Базовый расход Июл"},
-    {"Date": "2026-08-15", "Type": "Доход", "Amount": 105000, "Category": "FIXED", "Raw": "Базовый доход Авг"},
-    {"Date": "2026-08-15", "Type": "Расход", "Amount": 85000, "Category": "LIFE", "Raw": "Базовый расход Авг"},
-    {"Date": "2026-08-20", "Type": "Расход", "Amount": 13500, "Category": "LEAK", "Raw": "Утечки за период"},
+    {"Дата": "2026-04-15", "Тип": "Доход", "Сумма": 0, "Категория": "FIXED", "Описание": "Базовый доход Апр"},
+    {"Дата": "2026-04-15", "Тип": "Расход", "Сумма": 38000, "Категория": "LIFE", "Описание": "Базовый расход Апр"},
+    {"Дата": "2026-05-15", "Тип": "Доход", "Сумма": 28000, "Категория": "FIXED", "Описание": "Базовый доход Май"},
+    {"Дата": "2026-05-15", "Тип": "Расход", "Сумма": 25000, "Категория": "LIFE", "Описание": "Базовый расход Май"},
+    {"Дата": "2026-06-15", "Тип": "Доход", "Сумма": 48000, "Категория": "FIXED", "Описание": "Базовый доход Июн"},
+    {"Дата": "2026-06-15", "Тип": "Расход", "Сумма": 48000, "Категория": "LIFE", "Описание": "Базовый расход Июн"},
+    {"Дата": "2026-07-15", "Тип": "Доход", "Сумма": 82000, "Категория": "FIXED", "Описание": "Базовый доход Июл"},
+    {"Дата": "2026-07-15", "Тип": "Расход", "Сумма": 88000, "Категория": "LIFE", "Описание": "Базовый расход Июл"},
+    {"Дата": "2026-08-15", "Тип": "Доход", "Сумма": 105000, "Категория": "FIXED", "Описание": "Базовый доход Авг"},
+    {"Дата": "2026-08-15", "Тип": "Расход", "Сумма": 85000, "Категория": "LIFE", "Описание": "Базовый расход Авг"},
 ]
 
 @st.cache_data(ttl=5)
 def load_data():
-    cols = ["Date", "Type", "Amount", "Category", "Raw"]
     hist_df = pd.DataFrame(HISTORICAL_DATA)
-    
     if os.path.exists(CSV_PATH) and os.path.getsize(CSV_PATH) > 0:
-        new_df = pd.read_csv(CSV_PATH)
-        for col in cols:
-            if col not in new_df.columns:
-                new_df[col] = None
-        df = pd.concat([hist_df, new_df], ignore_index=True)
+        try:
+            raw_csv = pd.read_csv(CSV_PATH)
+            # Приведение наименований колонок к единому стандарту
+            rename_dict = {
+                "Date": "Дата", "Type": "Тип", "Amount": "Сумма", 
+                "Category": "Категория", "Raw": "Описание"
+            }
+            raw_csv = raw_csv.rename(columns=rename_dict)
+            df = pd.concat([hist_df, raw_csv], ignore_index=True)
+        except Exception:
+            df = hist_df
     else:
         df = hist_df
-        
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
-    df["YearMonth"] = df["Date"].dt.strftime("%Y-%m")
-    df["YearWeek"] = df["Date"].dt.strftime("%Y-W%U")
-    df["Day"] = df["Date"].dt.strftime("%Y-%m-%d")
+
+    df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
+    df["Сумма"] = pd.to_numeric(df["Сумма"], errors="coerce").fillna(0)
+    df["Месяц"] = df["Дата"].dt.strftime("%Y-%m")
+    df["Неделя"] = df["Дата"].dt.strftime("%Y-W%U")
+    df["День"] = df["Дата"].dt.strftime("%Y-%m-%d")
     return df
 
 df = load_data()
 
+# --- ШАПКА И ПРИВЕТСТВИЕ ---
 st.title("Добрый день, Талгат 👋")
 
-# --- ВЕРХНИЕ МЕТРИКИ (ИЗ ОРИГИНАЛЬНОГО ДАШБОРДА) ---
-net_capital = -26967
-income_total = df[df["Type"] == "Доход"]["Amount"].sum()
-expense_total = df[df["Type"] == "Расход"]["Amount"].sum()
-net_flow = income_total - expense_total
+# --- БОКОВАЯ ПАНЕЛЬ И ФИЛЬТРЫ ---
+st.sidebar.header("⚙️ Период и Детализация")
+view_mode = st.sidebar.radio("Масштаб:", ["Глобальный (Все время)", "По месяцам", "По неделям", "По дням"])
 
+filtered_df = df.copy()
+
+if view_mode == "По месяцам":
+    months = sorted(df["Месяц"].dropna().unique(), reverse=True)
+    selected_m = st.sidebar.selectbox("Выберите месяц:", months)
+    filtered_df = df[df["Месяц"] == selected_m]
+elif view_mode == "По неделям":
+    weeks = sorted(df["Неделя"].dropna().unique(), reverse=True)
+    selected_w = st.sidebar.selectbox("Выберите неделю:", weeks)
+    filtered_df = df[df["Неделя"] == selected_w]
+elif view_mode == "По дням":
+    selected_d = st.sidebar.date_input("Выберите день:", value=df["Дата"].max())
+    filtered_df = df[df["Дата"].dt.date == selected_d]
+
+# --- ДАШБОРД ВЕРХНИХ МЕТРИК ---
+net_capital = -26967
 avg_income = 67200
 avg_burn_rate = 72600
 savings_rate = -8.0
-leaks = df[df["Category"] == "LEAK"]["Amount"].sum()
-if leaks == 0:
-    leaks = 13500
+leaks_total = 13500
 
 col_cap, col_stat = st.columns([1, 2])
 
@@ -67,59 +93,92 @@ with col_cap:
     st.markdown("### ЧИСТЫЙ КАПИТАЛ")
     st.markdown(f"# {net_capital:,.0f} ₽".replace(",", " "))
     st.caption("Ликвидный резерв + накопленный результат")
-    st.success("+17 797 ₽ за месяц (Деньги — это ресурс для развития)")
+    st.success("+17 797 ₽ за месяц\n\n_Деньги — это ресурс для развития_")
 
 with col_stat:
     m1, m2 = st.columns(2)
-    m1.metric("СЕДНИЙ ДОХОД", f"{avg_income/1000:.1f} тыс. ₽", "расчет за 5 месяцев")
+    m1.metric("СРЕДНИЙ ДОХОД", f"{avg_income/1000:.1f} тыс. ₽", "расчет за 5 месяцев")
     m2.metric("СРЕДНИЙ BURN RATE", f"{avg_burn_rate/1000:.1f} тыс. ₽", "расходы за месяц")
     
     m3, m4 = st.columns(2)
     m3.metric("НОРМА СБЕРЕЖЕНИЙ", f"{savings_rate:.1f}%", "цель: не менее 20%", delta_color="inverse")
-    m4.metric("НАЙДЕНО УТЕЧЕК ⚡", f"{leaks/1000:.1f} тыс. ₽", "можно вернуть в капитал", delta_color="inverse")
+    m4.metric("НАЙДЕНО УТЕЧЕК ⚡", f"{leaks_total/1000:.1f} тыс. ₽", "можно вернуть в капитал", delta_color="inverse")
+
+# Финансовая автономия (спидометр)
+col_gauge, col_bar = st.columns([1, 2])
+
+with col_gauge:
+    st.markdown("##### ФИНАНСОВАЯ АВТОНОМИЯ")
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=0.3,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': "Сколько месяцев можно жить без дохода"},
+        gauge={
+            'axis': {'range': [0, 12]},
+            'bar': {'color': "#80FF00"},
+            'steps': [
+                {'range': [0, 3], 'color': "#331111"},
+                {'range': [3, 6], 'color': "#333311"},
+                {'range': [6, 12], 'color': "#113311"}
+            ],
+        }
+    ))
+    fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=30, b=10), template="plotly_dark")
+    st.plotly_chart(fig_gauge, use_container_width=True)
+
+with col_bar:
+    st.markdown("##### Доход против расхода")
+    monthly_grp = df.groupby(["Месяц", "Тип"])["Сумма"].sum().unstack(fill_value=0).reset_index()
+    fig_bar = go.Figure()
+    if "Доход" in monthly_grp.columns:
+        fig_bar.add_trace(go.Bar(x=monthly_grp["Месяц"], y=monthly_grp["Доход"], name="Доход", marker_color="#1E4D3B"))
+    if "Расход" in monthly_grp.columns:
+        fig_bar.add_trace(go.Bar(x=monthly_grp["Месяц"], y=monthly_grp["Расход"], name="Расход", marker_color="#80FF00"))
+    fig_bar.update_layout(barmode="group", height=250, margin=dict(l=10, r=10, t=30, b=10), template="plotly_dark")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 st.markdown("---")
 
-# --- ТАБЫ: ГЛОБАЛЬНЫЙ И ДЕТАЛЬНЫЙ АНАЛИЗ ---
-tab_global, tab_detail, tab_table = st.tabs(["📊 Глобальный баланс (Апр-Авг+)", "📅 Анализ по дням и неделям", "📑 Все транзакции"])
+# --- ОСНОВНЫЕ ВКЛАДКИ (ТАБЫ) С ТВОЕГО КОДА ---
+tab1, tab2, tab3 = st.tabs(["🎯 Жесткие лимиты", "⚡ Охота на утечки (LEAK)", "📑 История всех записей"])
 
-with tab_global:
-    st.subheader("Доход против расхода")
-    
-    # Группировка по месяцам
-    monthly_df = df.groupby(["YearMonth", "Type"])["Amount"].sum().unstack(fill_value=0).reset_index()
-    
-    if not monthly_df.empty:
-        fig = go.Figure()
-        if "Доход" in monthly_df.columns:
-            fig.add_trace(go.Bar(x=monthly_df["YearMonth"], y=monthly_df["Доход"], name="Доход", marker_color="#1E4D3B"))
-        if "Расход" in monthly_df.columns:
-            fig.add_trace(go.Bar(x=monthly_df["YearMonth"], y=monthly_df["Расход"], name="Расход", marker_color="#80FF00"))
-            
-        fig.update_layout(barmode="group", xaxis_title="Месяц", yaxis_title="Сумма (₽)", template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+with tab1:
+    st.subheader("Жесткие лимиты расходов")
+    limits_data = [
+        {"Категория": "Фастфуд / Кафе", "Было": "5 000 ₽", "Лимит": "2 000 ₽", "Эффект": "+3 000 ₽"},
+        {"Категория": "Такси / Самокаты", "Было": "6 000 ₽", "Лимит": "2 000 ₽", "Эффект": "+4 000 ₽"},
+        {"Категория": "Цифровые донаты", "Было": "1 500 ₽", "Лимит": "0 ₽", "Эффект": "+1 500 ₽"}
+    ]
+    st.table(pd.DataFrame(limits_data))
 
-with tab_detail:
-    st.sidebar.header("⚙️ Фильтры детализации")
-    period = st.sidebar.radio("Период:", ["Все дни", "По неделям", "По дням"])
-    
-    filtered_df = df.copy()
-    if period == "По неделям":
-        w = st.sidebar.selectbox("Неделя:", sorted(df["YearWeek"].dropna().unique(), reverse=True))
-        filtered_df = df[df["YearWeek"] == w]
-    elif period == "По дням":
-        d = st.sidebar.date_input("День:", value=df["Date"].max())
-        filtered_df = df[df["Date"].dt.date == d]
+with tab2:
+    st.subheader("Охота на утечки (LEAK)")
+    leaks = pd.DataFrame([
+        {
+            "Утечка": "Аренда самокатов", 
+            "₽/мес": 4367, 
+            "₽/ГОД": 52404, 
+            "Конкретное действие": "Удалить приложения Whoosh/Юрент", 
+            "Приоритет": 1
+        },
+        {
+            "Утечка": "Спонтанный фастфуд", 
+            "₽/мес": 8638, 
+            "₽/ГОД": 103656, 
+            "Конкретное действие": "Перекусы с собой, лимит 2к", 
+            "Приоритет": 1
+        },
+        {
+            "Утечка": "Игровые донаты", 
+            "₽/мес": 1500, 
+            "₽/ГОД": 18000, 
+            "Конкретное действие": "Отвязать карту от аккаунтов", 
+            "Приоритет": 2
+        }
+    ])
+    st.dataframe(leaks, use_container_width=True)
 
-    st.subheader("Динамика трат")
-    exp_df = filtered_df[filtered_df["Type"] == "Расход"]
-    if not exp_df.empty:
-        daily_exp = exp_df.groupby("Day")["Amount"].sum().reset_index()
-        fig_daily = px.bar(daily_exp, x="Day", y="Amount", color_discrete_sequence=["#80FF00"], title="Расходы")
-        st.plotly_chart(fig_daily, use_container_width=True)
-    else:
-        st.info("Нет трат за выбранный период.")
-
-with tab_table:
-    st.subheader("Полный реестр операций")
-    st.dataframe(df[["Date", "Type", "Amount", "Category", "Raw"]].sort_values("Date", ascending=False), use_container_width=True)
+with tab3:
+    st.subheader("История всех записей")
+    st.dataframe(filtered_df[["Дата", "Тип", "Сумма", "Категория", "Описание"]].sort_values(by="Дата", ascending=False), use_container_width=True)
