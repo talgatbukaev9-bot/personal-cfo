@@ -18,7 +18,7 @@ st.markdown('<link rel="manifest" href="./manifest.json">', unsafe_allow_html=Tr
 
 CSV_PATH = "data.csv"
 
-# Базовые исторические данные по месяцам
+# Базовые исторические данные
 HISTORICAL_DATA = [
     {"Дата": "2026-04-15", "Тип": "Доход", "Сумма": 0, "Категория": "FIXED", "Описание": "Базовый доход Апр"},
     {"Дата": "2026-04-15", "Тип": "Расход", "Сумма": 38000, "Категория": "LIFE", "Описание": "Базовый расход Апр"},
@@ -32,13 +32,11 @@ HISTORICAL_DATA = [
     {"Дата": "2026-08-15", "Тип": "Расход", "Сумма": 85000, "Категория": "LIFE", "Описание": "Базовый расход Авг"},
 ]
 
-@st.cache_data(ttl=5)
 def load_data():
     hist_df = pd.DataFrame(HISTORICAL_DATA)
     if os.path.exists(CSV_PATH) and os.path.getsize(CSV_PATH) > 0:
         try:
             raw_csv = pd.read_csv(CSV_PATH)
-            # Приведение наименований колонок к единому стандарту
             rename_dict = {
                 "Date": "Дата", "Type": "Тип", "Amount": "Сумма", 
                 "Category": "Категория", "Raw": "Описание"
@@ -59,26 +57,40 @@ def load_data():
 
 df = load_data()
 
+# --- БОКОВАЯ ПАНЕЛЬ: РУЧНОЙ ВВОД ➕ ---
+st.sidebar.header("➕ Добавить операцию")
+
+with st.sidebar.form("add_transaction_form", clear_on_submit=True):
+    input_date = st.date_input("Дата", value=pd.Timestamp.now().date())
+    input_type = st.selectbox("Тип", ["Расход", "Доход"])
+    input_amount = st.number_input("Сумма (₽)", min_value=0.0, step=100.0)
+    input_category = st.selectbox("Категория", ["LIFE", "LEAK", "FIXED", "Еда/Кафе", "Такси/Транспорт", "Развлечения", "Прочее"])
+    input_desc = st.text_input("Описание / Комментарий")
+    
+    submitted = st.form_submit_button("Сохранить транзакцию")
+    
+    if submitted and input_amount > 0:
+        new_row = pd.DataFrame([{
+            "Date": input_date.strftime("%Y-%m-%d"),
+            "Type": input_type,
+            "Amount": input_amount,
+            "Category": input_category,
+            "Raw": input_desc if input_desc else "Ручной ввод"
+        }])
+        
+        # Сохранение в data.csv
+        if os.path.exists(CSV_PATH) and os.path.getsize(CSV_PATH) > 0:
+            new_row.to_csv(CSV_PATH, mode='a', header=False, index=False)
+        else:
+            new_row.to_csv(CSV_PATH, mode='w', header=True, index=False)
+            
+        st.success("✅ Сохранено!")
+        st.rerun()
+
+st.sidebar.markdown("---")
+
 # --- ШАПКА И ПРИВЕТСТВИЕ ---
 st.title("Добрый день, Талгат 👋")
-
-# --- БОКОВАЯ ПАНЕЛЬ И ФИЛЬТРЫ ---
-st.sidebar.header("⚙️ Период и Детализация")
-view_mode = st.sidebar.radio("Масштаб:", ["Глобальный (Все время)", "По месяцам", "По неделям", "По дням"])
-
-filtered_df = df.copy()
-
-if view_mode == "По месяцам":
-    months = sorted(df["Месяц"].dropna().unique(), reverse=True)
-    selected_m = st.sidebar.selectbox("Выберите месяц:", months)
-    filtered_df = df[df["Месяц"] == selected_m]
-elif view_mode == "По неделям":
-    weeks = sorted(df["Неделя"].dropna().unique(), reverse=True)
-    selected_w = st.sidebar.selectbox("Выберите неделю:", weeks)
-    filtered_df = df[df["Неделя"] == selected_w]
-elif view_mode == "По дням":
-    selected_d = st.sidebar.date_input("Выберите день:", value=df["Дата"].max())
-    filtered_df = df[df["Дата"].dt.date == selected_d]
 
 # --- ДАШБОРД ВЕРХНИХ МЕТРИК ---
 net_capital = -26967
@@ -104,7 +116,7 @@ with col_stat:
     m3.metric("НОРМА СБЕРЕЖЕНИЙ", f"{savings_rate:.1f}%", "цель: не менее 20%", delta_color="inverse")
     m4.metric("НАЙДЕНО УТЕЧЕК ⚡", f"{leaks_total/1000:.1f} тыс. ₽", "можно вернуть в капитал", delta_color="inverse")
 
-# Финансовая автономия (спидометр)
+# Финансовая автономия и График
 col_gauge, col_bar = st.columns([1, 2])
 
 with col_gauge:
@@ -140,7 +152,7 @@ with col_bar:
 
 st.markdown("---")
 
-# --- ОСНОВНЫЕ ВКЛАДКИ (ТАБЫ) С ТВОЕГО КОДА ---
+# --- ОСНОВНЫЕ ВКЛАДКИ ---
 tab1, tab2, tab3 = st.tabs(["🎯 Жесткие лимиты", "⚡ Охота на утечки (LEAK)", "📑 История всех записей"])
 
 with tab1:
@@ -181,4 +193,4 @@ with tab2:
 
 with tab3:
     st.subheader("История всех записей")
-    st.dataframe(filtered_df[["Дата", "Тип", "Сумма", "Категория", "Описание"]].sort_values(by="Дата", ascending=False), use_container_width=True)
+    st.dataframe(df[["Дата", "Тип", "Сумма", "Категория", "Описание"]].sort_values(by="Дата", ascending=False), use_container_width=True)
