@@ -2,54 +2,68 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
-from datetime import datetime
 
 st.set_page_config(page_title="Личный CFO", page_icon="💰", layout="wide")
 
 CSV_PATH = "data.csv"
 
-# Загрузка данных
-@st.cache_data(ttl=10)
+# Загрузка данных с защитой от отсутствующих колонок
+@st.cache_data(ttl=5)
 def load_data():
-    if not os.path.exists(CSV_PATH):
-        df = pd.DataFrame(columns=["Date", "Type", "Amount", "Category", "Raw"])
+    required_columns = ["Date", "Type", "Amount", "Category", "Raw"]
+    
+    if not os.path.exists(CSV_PATH) or os.path.getsize(CSV_PATH) == 0:
+        df = pd.DataFrame(columns=required_columns)
         df.to_csv(CSV_PATH, index=False)
         return df
     
     df = pd.read_csv(CSV_PATH)
-    if not df.empty:
-        df["Date"] = pd.to_datetime(df["Date"])
+    
+    # Проверка наличия всех колонок
+    for col in required_columns:
+        if col not in df.columns:
+            df[col] = None
+            
+    if not df.empty and df["Date"].notna().any():
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
         df["YearWeek"] = df["Date"].dt.strftime("%Y-W%U")
         df["YearMonth"] = df["Date"].dt.strftime("%Y-%m")
         df["DayName"] = df["Date"].dt.strftime("%d.%m (%a)")
+        
     return df
 
 df = load_data()
 
 st.title("📊 Личный CFO | Детальная аналитика финансов")
 
-if df.empty:
-    st.info("Пока нет записанных транзакций. Все новые покупки и пополнения из Telegram появятся здесь!")
+if df.empty or df["Date"].isna().all():
+    st.info("Пока нет записанных транзакций. Отправьте тестовое сообщение в Telegram-бота!")
 else:
     # ---------------- САЙДБАР: ФИЛЬТРЫ ----------------
     st.sidebar.header("⚙️ Фильтры и Период")
     
     period_type = st.sidebar.radio(
         "Группировка и фильтр:",
-        ["Вся история", "По месяцами", "По неделям", "По дням"]
+        ["Вся история", "По месяцам", "По неделям", "По дням"]
     )
 
     filtered_df = df.copy()
 
-    if period_type == "По месяцами":
-        selected_month = st.sidebar.selectbox("Выберите месяц:", sorted(df["YearMonth"].unique(), reverse=True))
-        filtered_df = df[df["YearMonth"] == selected_month]
-    elif period_type == "По неделям":
-        selected_week = st.sidebar.selectbox("Выберите неделю:", sorted(df["YearWeek"].unique(), reverse=True))
-        filtered_df = df[df["YearWeek"] == selected_week]
+    if period_type == "По месяцам" and "YearMonth" in df.columns:
+        months = sorted(df["YearMonth"].dropna().unique(), reverse=True)
+        if months:
+            selected_month = st.sidebar.selectbox("Выберите месяц:", months)
+            filtered_df = df[df["YearMonth"] == selected_month]
+    elif period_type == "По неделям" and "YearWeek" in df.columns:
+        weeks = sorted(df["YearWeek"].dropna().unique(), reverse=True)
+        if weeks:
+            selected_week = st.sidebar.selectbox("Выберите неделю:", weeks)
+            filtered_df = df[df["YearWeek"] == selected_week]
     elif period_type == "По дням":
-        selected_date = st.sidebar.date_input("Выберите день:", value=df["Date"].max())
+        valid_dates = df["Date"].dropna()
+        max_date = valid_dates.max() if not valid_dates.empty else pd.Timestamp.now()
+        selected_date = st.sidebar.date_input("Выберите день:", value=max_date)
         filtered_df = df[df["Date"].dt.date == selected_date]
 
     # ---------------- ГЛАВНЫЕ МЕТРИКИ ----------------
@@ -69,12 +83,10 @@ else:
     # ---------------- ДЕТАЛЬНАЯ АНАЛИТИКА ТРАТ ----------------
     st.subheader("📉 Детализация трат и расходов")
 
-    tab1, tab2, tab3 = st.tabs(["📅 Тренды по времени", "🍕 По категориям (FIXED/LIFE/WANT/LEAK)", "📑 Таблица операций"])
+    tab1, tab2, tab3 = st.tabs(["📅 Тренды по времени", "🍕 По категориям", "📑 Таблица операций"])
 
     with tab1:
         st.write("### Динамика расходов")
-        
-        # Группировка по дням
         daily_expense = filtered_df[filtered_df["Type"] == "Расход"].groupby("Date")["Amount"].sum().reset_index()
         if not daily_expense.empty:
             fig_daily = px.bar(
@@ -86,47 +98,13 @@ else:
                 color_discrete_sequence=["#FF4B4B"]
             )
             st.plotly_chart(fig_daily, use_container_width=True)
-        
-        # Группировка по неделям
-        weekly_expense = df[df["Type"] == "Расход"].groupby("YearWeek")["Amount"].sum().reset_index()
-        if not weekly_expense.empty:
-            fig_weekly = px.line(
-                weekly_expense, 
-                x="YearWeek", 
-                y="Amount", 
-                markers=True,
-                title="Сравнение трат по неделям (За весь период)",
-                labels={"Amount": "Сумма (₽)", "YearWeek": "Неделя"},
-                color_discrete_sequence=["#0068C9"]
-            )
-            st.plotly_chart(fig_weekly, use_container_width=True)
 
     with tab2:
         st.write("### Разбор категорий трат")
         cat_expense = filtered_df[filtered_df["Type"] == "Расход"].groupby("Category")["Amount"].sum().reset_index()
-        
         if not cat_expense.empty:
-            col_chart1, col_chart2 = st.columns(2)
-            
-            with col_chart1:
-                fig_pie = px.pie(
-                    cat_expense, 
-                    names="Category", 
-                    values="Amount", 
-                    title="Доли категорий трат",
-                    hole=0.4
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-            with col_chart2:
-                fig_cat_bar = px.bar(
-                    cat_expense.sort_values(by="Amount", ascending=False),
-                    x="Category",
-                    y="Amount",
-                    color="Category",
-                    title="Сумма трат по категориям"
-                )
-                st.plotly_chart(fig_cat_bar, use_container_width=True)
+            fig_pie = px.pie(cat_expense, names="Category", values="Amount", title="Доли категорий трат", hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
         else:
             st.info("За выбранный период нет расходов.")
 
